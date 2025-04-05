@@ -1,47 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const TimesheetPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { username } = location.state || { username: 'User' };
-
-    const [team, setTeam] = useState('');
-    const [entries, setEntries] = useState([]);
-    useEffect(() => {
-        const fetchTeam = async () => {
-            const username = sessionStorage.getItem('username');  // or from props
-            try {
-                const response = await fetch(`http://localhost:5000/api/getUserDetails?username=${username}`);
-                const data = await response.json();
-                if (data.success) {
-                    setTeam(data.team);
-                } else {
-                    setTeam('Not assigned');
-                }
-            } catch (error) {
-                console.error('Error fetching team:', error);
-                setTeam('Not assigned');
-            }
-        };
+    const { username, team } = location.state || { username: 'User', team: 'IT-Internal' };
     
-        fetchTeam();
-    }, []);
-         // removed username dependency
-
-    const addNewEntry = () => {
-        setEntries([...entries, {
-            team: team,
-            date: '',
-            projectName: '',
-            activityType: '',
-            activityPerformed: '',
-            jobType: '',
-            hoursSpent: '',
-            isEditing: true
-        }]);
-    };
+    const [entries, setEntries] = useState([{
+        date: '',
+        projectName: '',
+        activityType: '',
+        activityPerformed: '',
+        jobType: '',
+        hoursSpent: '',
+        isEditing: true
+    }]);
 
     const handleLogout = () => {
         navigate('/');
@@ -54,17 +27,17 @@ const TimesheetPage = () => {
         setEntries(newEntries);
     };
 
-    // const addNewEntry = () => {
-    //     setEntries([...entries, {
-    //         date: '',
-    //         projectName: '',
-    //         activityType: '',
-    //         activityPerformed: '',
-    //         jobType: '',
-    //         hoursSpent: '',
-    //         isEditing: true
-    //     }]);
-    // };
+    const addNewEntry = () => {
+        setEntries([...entries, {
+            date: '',
+            projectName: '',
+            activityType: '',
+            activityPerformed: '',
+            jobType: '',
+            hoursSpent: '',
+            isEditing: true
+        }]);
+    };
 
     const handleSave = (index) => {
         const newEntries = [...entries];

@@ -5,7 +5,6 @@ const bodyParser = require('body-parser');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
-
 const app = express();
 
 // Security middleware
@@ -124,40 +123,6 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ 
       success: false,
       message: 'Internal server error'
-    });
-  }
-});
-
-
-// Get User Details Endpoint
-app.get('/api/getUserDetails', async (req, res) => {
-  const { username } = req.query;
-
-  if (!username) {
-    return res.status(400).json({ success: false, message: 'Username is required' });
-  }
-
-  try {
-    const result = await pool.request()
-      .input('username', sql.VarChar, username)
-      .query('SELECT Team FROM Users WHERE Username = @username');
-
-    if (result.recordset.length > 0) {
-      return res.status(200).json({ 
-        success: true, 
-        team: result.recordset[0].Team 
-      });
-    } else {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching user details:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error' 
     });
   }
 });
