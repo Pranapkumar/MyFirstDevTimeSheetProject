@@ -11,32 +11,34 @@ const LoginPage = () => {
     const handleLogin = async (e) => {
         e.preventDefault();
         setError('');
-        
+
         if (!username || !password) {
             setError('Please enter both username and password');
             return;
         }
 
         setIsLoading(true);
-        
+
         try {
-            const response = await fetch('http://192.168.4.22:5000/api/login', {
+            const response = await fetch('http://localhost:5000/api/login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({
-                    username,
-                    password
-                })
+                body: JSON.stringify({ username, password }),
             });
 
             const data = await response.json();
-            
+
             if (data.success) {
-                navigate('/timesheet', { state: { username: data.username } });
+                // Store username, team, and role in sessionStorage
+                sessionStorage.setItem('username', data.username);
+                sessionStorage.setItem('team', data.team);
+                sessionStorage.setItem('role', data.role); // Store role in sessionStorage
+
+                navigate('/timesheet', { state: { username: data.username, team: data.team, role: data.role } }); // Pass role in state
             } else {
-                setError(data.message);
+                setError(data.message || 'Invalid username or password');
             }
         } catch (error) {
             console.error('Login error:', error);
@@ -69,74 +71,47 @@ const LoginPage = () => {
         <div style={pageStyles}>
             <div style={formStyles}>
                 <h2 style={{ textAlign: 'center', marginBottom: '1.5rem' }}>Login Page</h2>
+
                 {error && (
-                    <div style={{ 
+                    <div style={{
                         color: '#dc3545',
                         backgroundColor: '#f8d7da',
                         padding: '0.5rem',
-                        borderRadius: '4px',
                         marginBottom: '1rem',
-                        fontSize: '0.9rem'
+                        borderRadius: '4px'
                     }}>
                         {error}
                     </div>
                 )}
+
                 <form onSubmit={handleLogin}>
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ 
-                            display: 'block', 
-                            marginBottom: '0.5rem',
-                            fontWeight: '500'
-                        }}>
-                            Username:
-                        </label>
-                        <input
-                            type="text"
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            required
-                            style={{ 
-                                width: '100%', 
-                                padding: '0.5rem',
-                                border: '1px solid #ced4da',
-                                borderRadius: '4px'
-                            }}
-                        />
-                    </div>
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ 
-                            display: 'block', 
-                            marginBottom: '0.5rem',
-                            fontWeight: '500'
-                        }}>
-                            Password:
-                        </label>
-                        <input
-                            type="password"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            style={{ 
-                                width: '100%', 
-                                padding: '0.5rem',
-                                border: '1px solid #ced4da',
-                                borderRadius: '4px'
-                            }}
-                        />
-                    </div>
-                    <button 
+                    <input
+                        type="text"
+                        placeholder="Username"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        style={{ width: '100%', marginBottom: '1rem', padding: '0.5rem' }}
+                    />
+
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        style={{ width: '100%', marginBottom: '1rem', padding: '0.5rem' }}
+                    />
+
+                    <button
                         type="submit"
                         disabled={isLoading}
                         style={{
                             width: '100%',
-                            padding: '0.75rem',
-                            backgroundColor: '#4CAF50',
-                            color: 'white',
+                            padding: '0.5rem',
+                            backgroundColor: '#007bff',
+                            color: '#fff',
                             border: 'none',
                             borderRadius: '4px',
-                            cursor: 'pointer',
-                            fontWeight: '500',
-                            opacity: isLoading ? 0.7 : 1
+                            cursor: 'pointer'
                         }}
                     >
                         {isLoading ? 'Logging in...' : 'Login'}

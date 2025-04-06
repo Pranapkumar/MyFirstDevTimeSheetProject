@@ -1,34 +1,134 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const TimesheetPage = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { username } = location.state || { username: 'User' };
 
-    const [team, setTeam] = useState('');
+    const [team, setTeam] = useState(location.state?.team || sessionStorage.getItem('team') || '');
     const [entries, setEntries] = useState([]);
+    const [activityTypes, setActivityTypes] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState(null);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [users, setUsers] = useState([]);
+    const [showUserManagement, setShowUserManagement] = useState(false);
+    const [newUser , setNewUser ] = useState({
+        username: '',
+        password: '',
+        team: '',
+        role: ''
+    });
+    const [passwordChange, setPasswordChange] = useState({
+        userId: '',
+        newPassword: ''
+    });
+
+    const username = location.state?.username || sessionStorage.getItem('username');
+    const role = location.state?.role || sessionStorage.getItem('role') || '';
+    const isAdmin = role === 'Admin'; // Check if the user is an admin
+
     useEffect(() => {
-        const fetchTeam = async () => {
-            const username = sessionStorage.getItem('username');  // or from props
-            try {
-                const response = await fetch(`http://localhost:5000/api/getUserDetails?username=${username}`);
-                const data = await response.json();
-                if (data.success) {
-                    setTeam(data.team);
+        if (!username) {
+            navigate('/login');  // If username missing -> Force login
+        }
+    }, [username, navigate]);
+
+    const fetchTeamAndActivityTypes = useCallback(async () => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            let teamData = team;
+
+            if (!teamData) {
+                const teamResponse = await axios.get(`http://localhost:5000/api/getUser Details?username=${encodeURIComponent(username)}`);
+                
+                if (!teamResponse.data.success) throw new Error(teamResponse.data.message || 'Failed to fetch team');
+                
+                teamData = teamResponse.data.user.team;
+                
+                setTeam(teamData);
+                sessionStorage.setItem('team', teamData);  // Store team in session for next visit
+            }
+
+            const activitiesResponse = await axios.get(`http://localhost:5000/api/activityTypes?team=${encodeURIComponent(teamData)}`);
+            
+            if (!activitiesResponse.data.success) throw new Error(activitiesResponse.data.message || 'Failed to fetch activity types');
+            
+            setActivityTypes(activitiesResponse.data.activityTypes || []);
+            
+            // If admin, fetch all users
+            if (isAdmin) {
+                const usersResponse = await axios.get('http://localhost:5000/api/users');
+                if (usersResponse.data.success) {
+                    setUsers(usersResponse.data.users || []);
                 } else {
-                    setTeam('Not assigned');
+                    console.error('Failed to fetch users:', usersResponse.data.message);
+                }
+            }
+        } catch (err) {
+            console.error('Fetch error:', err);
+            setError(err.message || 'Network or server error');
+            setActivityTypes([]);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [username, team, isAdmin]);
+
+    useEffect(() => {
+        if (username) {
+            fetchTeamAndActivityTypes();
+        }
+    }, [fetchTeamAndActivityTypes, username]);
+
+    // Admin User Management Functions
+    const handleCreateUser  = async () => {
+        try {
+            const response = await axios.post('http://localhost:5000/api/users', newUser );
+            if (response.data.success) {
+                alert('User  created successfully!');
+                setNewUser ({ username: '', password: '', team: '', role: '' });
+                fetchTeamAndActivityTypes(); // Refresh user list
+            }
+        } catch (error) {
+            console.error('Error creating user:', error);
+            alert('Error creating user: ' + (error.response?.data?.message || 'Unknown error'));
+        }
+    };
+
+    const handleDeleteUser  = async (userId) => {
+        if (window.confirm('Are you sure you want to delete this user?')) {
+            try {
+                const response = await axios.delete(`http://localhost:5000/api/users/${userId}`);
+                if (response.data.success) {
+                    alert('User  deleted successfully!');
+                    fetchTeamAndActivityTypes(); // Refresh user list
                 }
             } catch (error) {
-                console.error('Error fetching team:', error);
-                setTeam('Not assigned');
+                console.error('Error deleting user:', error);
+                alert('Error deleting user: ' + (error.response?.data?.message || 'Unknown error'));
             }
-        };
-    
-        fetchTeam();
-    }, []);
-         // removed username dependency
+        }
+    };
+
+    const handleChangePassword = async () => {
+        try {
+            const response = await axios.put(
+                `http://localhost:5000/api/users/${passwordChange.userId}/password`,
+                { newPassword: passwordChange.newPassword }
+            );
+            if (response.data.success) {
+                alert('Password changed successfully!');
+                setPasswordChange({ userId: '', newPassword: '' });
+            }
+        } catch (error) {
+            console.error('Error changing password:', error);
+            alert('Error changing password: ' + (error.response?.data?.message || 'Unknown error'));
+        }
+    };
 
     const addNewEntry = () => {
         setEntries([...entries, {
@@ -54,18 +154,6 @@ const TimesheetPage = () => {
         setEntries(newEntries);
     };
 
-    // const addNewEntry = () => {
-    //     setEntries([...entries, {
-    //         date: '',
-    //         projectName: '',
-    //         activityType: '',
-    //         activityPerformed: '',
-    //         jobType: '',
-    //         hoursSpent: '',
-    //         isEditing: true
-    //     }]);
-    // };
-
     const handleSave = (index) => {
         const newEntries = [...entries];
         newEntries[index].isEditing = false;
@@ -81,6 +169,7 @@ const TimesheetPage = () => {
     const handleClear = (index) => {
         const newEntries = [...entries];
         newEntries[index] = {
+            team: team,
             date: '',
             projectName: '',
             activityType: '',
@@ -98,22 +187,42 @@ const TimesheetPage = () => {
         setEntries(newEntries);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const payload = {
-            username,
-            team,
-            entries: entries.map(entry => ({
-                ...entry,
-                date: new Date(entry.date).toISOString().split('T')[0] // Format date
-            }))
-        };
-        console.log('Timesheet submitted:', payload);
-        alert('Timesheet saved successfully!');
+        try {
+            const payload = {
+                username,
+                team,
+                entries: entries.map(entry => ({
+                    ...entry,
+                    date: new Date(entry.date).toISOString().split('T')[0],
+                    hoursSpent: parseFloat(entry.hoursSpent) || 0
+                }))
+            };
+
+            const response = await axios.post('http://localhost:5000/api/timesheets', payload);
+            if (response.data.success) {
+                alert('Timesheet saved successfully!');
+                setEntries([{ 
+                    team, 
+                    date: '', 
+                    projectName: '', 
+                    activityType: '', 
+                    activityPerformed: '', 
+                    jobType: '', 
+                    hoursSpent: '', 
+                    isEditing: true 
+                }]);
+            }
+        } catch (error) {
+            setError(error.response?.data?.error || 'Failed to submit timesheet');
+            console.error('Submission error:', error);
+        }
     };
 
     const handleCancel = () => {
         setEntries([{
+            team: team,
             date: '',
             projectName: '',
             activityType: '',
@@ -124,7 +233,25 @@ const TimesheetPage = () => {
         }]);
     };
 
-    // Styles
+    const handleDownloadReport = async () => {
+        try {
+            const response = await axios.get(`http://localhost:5000/api/timesheet/report?startDate=${startDate}&endDate=${endDate}`, {
+                responseType: 'blob' // Important for downloading files
+            });
+
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'timesheet_report.xlsx'); // Specify the file name
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            console.error('Error downloading report:', error);
+            alert('Failed to download report.');
+        }
+    };
+
     const pageStyles = {
         backgroundImage: 'url(/assets/Login/blue.jpg)',
         backgroundSize: 'cover',
@@ -255,6 +382,42 @@ const TimesheetPage = () => {
         transition: 'all 0.2s'
     };
 
+    const adminSectionStyles = {
+        marginTop: '40px',
+        padding: '20px',
+        backgroundColor: '#f5f5f5',
+        borderRadius: '8px',
+        border: '1px solid #ddd'
+    };
+
+    const adminButtonStyles = {
+        padding: '8px 16px',
+        backgroundColor: '#673ab7',
+        color: 'white',
+        border: 'none',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        fontSize: '14px',
+        marginBottom: '20px'
+    };
+
+    const adminInputStyles = {
+        padding: '8px',
+        border: '1px solid #ddd',
+        borderRadius: '4px',
+        margin: '5px',
+        width: '200px'
+    };
+
+    const userTableStyles = {
+        width: '100%',
+        borderCollapse: 'collapse',
+        marginTop: '20px'
+    };
+
+    if (isLoading) return <div>Loading...</div>;
+    if (error) return <div>Error: {error}</div>;
+
     return (
         <div style={pageStyles}>
             <div style={containerStyles}>
@@ -264,11 +427,9 @@ const TimesheetPage = () => {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={usernameStyles}>{username}</span>
                             {team && <span style={teamBadgeStyles}>{team}</span>}
+                            {isAdmin && <span style={{ ...teamBadgeStyles, backgroundColor: '#e8f5e9', color: '#2e7d32' }}>Admin</span>}
                         </div>
-                        <button 
-                            onClick={handleLogout} 
-                            style={logoutButtonStyles}
-                        >
+                        <button onClick={handleLogout} style={logoutButtonStyles}>
                             Log Out
                         </button>
                     </div>
@@ -279,7 +440,7 @@ const TimesheetPage = () => {
                         <table style={tableStyles}>
                             <thead>
                                 <tr>
-                                    <th style={thStyles}>Team</th>
+                                    <th style={thStyles}>Team*</th>
                                     <th style={thStyles}>Date*</th>
                                     <th style={thStyles}>Project Name*</th>
                                     <th style={thStyles}>Activity Type*</th>
@@ -295,7 +456,7 @@ const TimesheetPage = () => {
                                         <td style={tdStyles}>
                                             <input
                                                 type="text"
-                                                value={team || 'Not assigned'}
+                                                value={entry.team}
                                                 readOnly
                                                 style={readOnlyInputStyles}
                                             />
@@ -332,10 +493,11 @@ const TimesheetPage = () => {
                                                 disabled={!entry.isEditing}
                                             >
                                                 <option value="">Select---</option>
-                                                <option value="BRNET">BRNET</option>
-                                                <option value="GLOW">GLOW</option>
-                                                <option value="TruCell">TruCell</option>
-                                                <option value="TracOD">TracOD</option>
+                                                {activityTypes.map((type) => (
+                                                    <option key={type.Id} value={type.ActivityName}>
+                                                        {type.ActivityName}
+                                                    </option>
+                                                ))}
                                             </select>
                                         </td>
                                         <td style={tdStyles}>
@@ -378,65 +540,32 @@ const TimesheetPage = () => {
                                             />
                                         </td>
                                         <td style={{ ...tdStyles, textAlign: 'center' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                                {entry.isEditing ? (
-                                                    <>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleSave(index)}
-                                                            style={{
-                                                                ...buttonStyles,
-                                                                backgroundColor: '#4caf50',
-                                                                color: 'white',
-                                                                ':hover': {
-                                                                    backgroundColor: '#388e3c'
-                                                                }
-                                                            }}
-                                                        >
-                                                            Save
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleClear(index)}
-                                                            style={{
-                                                                ...buttonStyles,
-                                                                backgroundColor: '#ff9800',
-                                                                color: '#fff',
-                                                                ':hover': {
-                                                                    backgroundColor: '#f57c00'
-                                                                }
-                                                            }}
-                                                        >
-                                                            Clear
-                                                        </button>
-                                                    </>
-                                                ) : (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleEdit(index)}
-                                                        style={{
-                                                            ...buttonStyles,
-                                                            backgroundColor: '#2196f3',
-                                                            color: 'white',
-                                                            ':hover': {
-                                                                backgroundColor: '#1976d2'
-                                                            }
-                                                        }}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
-                                                <button
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleEdit(index)}
+                                                    style={{ ...buttonStyles, backgroundColor: '#2196f3', color: 'white' }}
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleSave(index)}
+                                                    style={{ ...buttonStyles, backgroundColor: '#4caf50', color: 'white' }}
+                                                >
+                                                    Save
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => handleClear(index)}
+                                                    style={{ ...buttonStyles, backgroundColor: '#ff9800', color: 'white' }}
+                                                >
+                                                    Clear
+                                                </button>
+                                                <button 
                                                     type="button"
                                                     onClick={() => handleDelete(index)}
-                                                    style={{
-                                                        ...buttonStyles,
-                                                        backgroundColor: '#f44336',
-                                                        color: 'white',
-                                                        ':hover': {
-                                                            backgroundColor: '#d32f2f'
-                                                        }
-                                                    }}
+                                                    style={{ ...buttonStyles, backgroundColor: '#f44336', color: 'white' }}
                                                 >
                                                     Delete
                                                 </button>
@@ -449,55 +578,179 @@ const TimesheetPage = () => {
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-                        <div>
-                            <button
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                            <button 
                                 type="button"
                                 onClick={addNewEntry}
-                                style={{
-                                    ...actionButtonStyles,
-                                    backgroundColor: '#4caf50',
-                                    color: 'white',
-                                    marginRight: '10px',
-                                    ':hover': {
-                                        backgroundColor: '#388e3c'
-                                    }
-                                }}
+                                style={{ ...actionButtonStyles, backgroundColor: '#2196f3', color: 'white' }}
                             >
-                                + New Entry
+                                Add New Entry
                             </button>
-                        </div>
-                        <div>
-                            <button
+                            <button 
                                 type="button"
                                 onClick={handleCancel}
-                                style={{
-                                    ...actionButtonStyles,
-                                    backgroundColor: '#9e9e9e',
-                                    color: 'white',
-                                    marginRight: '10px',
-                                    ':hover': {
-                                        backgroundColor: '#757575'
-                                    }
-                                }}
+                                style={{ ...actionButtonStyles, backgroundColor: '#9e9e9e', color: 'white' }}
                             >
                                 Cancel
                             </button>
-                            <button
-                                type="submit"
-                                style={{
-                                    ...actionButtonStyles,
-                                    backgroundColor: '#2196f3',
-                                    color: 'white',
-                                    ':hover': {
-                                        backgroundColor: '#1976d2'
-                                    }
-                                }}
-                            >
-                                Submit All
-                            </button>
                         </div>
+                        <button 
+                            type="submit"
+                            style={{ ...actionButtonStyles, backgroundColor: '#4caf50', color: 'white' }}
+                        >
+                            Submit Timesheet
+                        </button>
                     </div>
                 </form>
+
+                {/* Date Range for Report Generation */}
+                <div style={{ marginTop: '300px' }}>
+                    <h3>Generate Timesheet Report</h3>
+                    <div style={{ display: 'flex', gap: '400px', alignItems: 'center' }}>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            style={inputStyles}
+                        />
+                        <input
+                            type="date"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                            style={inputStyles}
+                        />
+                        <button 
+                            onClick={handleDownloadReport}
+                            style={{ ...actionButtonStyles, backgroundColor: '#2196f3', color: 'white' }}
+                        >
+                            Download Report
+                        </button>
+                    </div>
+                </div>
+
+                {/* Admin User Management Section */}
+                {isAdmin && (
+                    <div style={adminSectionStyles}>
+                        <h3>User Management</h3>
+                        <button
+                            onClick={() => setShowUserManagement(!showUserManagement)}
+                            style={adminButtonStyles}
+                        >
+                            {showUserManagement ? 'Hide User Management' : 'Show User Management'}
+                        </button>
+                        {showUserManagement && (
+                            <>
+                                {/* Create New User */}
+                                <div style={{ margin: '20px 0' }}>
+                                    <h4>Create New User</h4>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Username"
+                                            value={newUser .username}
+                                            onChange={(e) => setNewUser ({ ...newUser , username: e.target.value })}
+                                            style={adminInputStyles}
+                                        />
+                                        <input
+                                            type="password"
+                                            placeholder="Password"
+                                            value={newUser .password}
+                                            onChange={(e) => setNewUser ({ ...newUser , password: e.target.value })}
+                                            style={adminInputStyles}
+                                        />
+                                        <input
+                                            type="text"
+                                            placeholder="Team"
+                                            value={newUser .team}
+                                            onChange={(e) => setNewUser ({ ...newUser , team: e.target.value })}
+                                            style={adminInputStyles}
+                                        />
+                                        <select
+                                            value={newUser .role}
+                                            onChange={(e) => setNewUser ({ ...newUser , role: e.target.value })}
+                                            style={adminInputStyles}
+                                        >
+                                            <option value="">Select Role</option>
+                                            <option value="Admin">Admin</option>
+                                            <option value="User ">User </option>
+                                        </select>
+                                        <button
+                                            onClick={handleCreateUser }
+                                            style={{ ...adminButtonStyles, backgroundColor: '#4caf50' }}
+                                            disabled={!newUser .username || !newUser .password || !newUser .team || !newUser .role}
+                                        >
+                                            Create User
+                                        </button>
+                                    </div>
+                                </div>
+                                {/* Change Password */}
+                                <div style={{ margin: '20px 0' }}>
+                                    <h4>Change User Password</h4>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+                                        <select
+                                            value={passwordChange.userId}
+                                            onChange={(e) => setPasswordChange({ ...passwordChange, userId: e.target.value })}
+                                            style={adminInputStyles}
+                                        >
+                                            <option value="">Select User</option>
+                                            {users.map(user => (
+                                                <option key={user.UserID} value={user.UserID}>{user.Username}</option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            type="password"
+                                            placeholder="New Password"
+                                            value={passwordChange.newPassword}
+                                            onChange={(e) => setPasswordChange({ ...passwordChange, newPassword: e.target.value })}
+                                            style={adminInputStyles}
+                                        />
+                                        <button
+                                            onClick={handleChangePassword}
+                                            style={{ ...adminButtonStyles, backgroundColor: '#ff9800' }}
+                                            disabled={!passwordChange.userId || !passwordChange.newPassword}
+                                        >
+                                            Change Password
+                                        </button>
+                                    </div>
+                                </div>
+                                {/* Users List */}
+                                <div style={{ margin: '20px 0' }}>
+                                    <h4>User List</h4>
+                                    <table style={userTableStyles}>
+                                        <thead>
+                                            <tr>
+                                                <th style={thStyles}>ID</th>
+                                                <th style={thStyles}>Username</th>
+                                                <th style={thStyles}>Team</th>
+                                                <th style={thStyles}>Role</th>
+                                                <th style={thStyles}>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {users.map(user => (
+                                                <tr key={user.UserID}>
+                                                    <td style={tdStyles}>{user.UserID}</td>
+                                                    <td style={tdStyles}>{user.Username}</td>
+                                                    <td style={tdStyles}>{user.Team}</td>
+                                                    <td style={tdStyles}>{user.Role || 'User '}</td>
+                                                    <td style={tdStyles}>
+                                                        <button
+                                                            onClick={() => handleDeleteUser (user.UserID)}
+                                                            style={{ ...buttonStyles, backgroundColor: '#f44336', color: 'white' }}
+                                                            disabled={user.Username === username} // Don't allow self-deletion
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
