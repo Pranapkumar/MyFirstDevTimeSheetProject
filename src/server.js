@@ -11,7 +11,7 @@ const app = express();
 // Enhanced Middleware setup
 app.use(helmet());
 app.use(cors({
-  origin: ['http://localhost:3000'],
+  origin: ['http://192.168.4.22'],
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
