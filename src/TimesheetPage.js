@@ -44,7 +44,7 @@ const TimesheetPage = () => {
             let teamData = team;
 
             if (!teamData) {
-                const teamResponse = await axios.get(`http://localhost:5000/api/getUser Details?username=${encodeURIComponent(username)}`);
+                const teamResponse = await axios.get(`http://192.168.4.22:5000/api/getUser Details?username=${encodeURIComponent(username)}`);
                 
                 if (!teamResponse.data.success) throw new Error(teamResponse.data.message || 'Failed to fetch team');
                 
@@ -54,7 +54,7 @@ const TimesheetPage = () => {
                 sessionStorage.setItem('team', teamData);  // Store team in session for next visit
             }
 
-            const activitiesResponse = await axios.get(`http://localhost:5000/api/activityTypes?team=${encodeURIComponent(teamData)}`);
+            const activitiesResponse = await axios.get(`http://192.168.4.22:5000/api/activityTypes?team=${encodeURIComponent(teamData)}`);
             
             if (!activitiesResponse.data.success) throw new Error(activitiesResponse.data.message || 'Failed to fetch activity types');
             
@@ -62,7 +62,7 @@ const TimesheetPage = () => {
             
             // If admin, fetch all users
             if (isAdmin) {
-                const usersResponse = await axios.get('http://localhost:5000/api/users');
+                const usersResponse = await axios.get('http://192.168.4.22:5000/api/users');
                 if (usersResponse.data.success) {
                     setUsers(usersResponse.data.users || []);
                 } else {
@@ -87,7 +87,7 @@ const TimesheetPage = () => {
     // Admin User Management Functions
     const handleCreateUser  = async () => {
         try {
-            const response = await axios.post('http://localhost:5000/api/users', newUser );
+            const response = await axios.post('http://192.168.4.22:5000/api/users', newUser );
             if (response.data.success) {
                 alert('User  created successfully!');
                 setNewUser ({ username: '', password: '', team: '', role: '' });
@@ -102,7 +102,7 @@ const TimesheetPage = () => {
     const handleDeleteUser  = async (userId) => {
         if (window.confirm('Are you sure you want to delete this user?')) {
             try {
-                const response = await axios.delete(`http://localhost:5000/api/users/${userId}`);
+                const response = await axios.delete(`http://192.168.4.22:5000/api/users/${userId}`);
                 if (response.data.success) {
                     alert('User  deleted successfully!');
                     fetchTeamAndActivityTypes(); // Refresh user list
@@ -117,7 +117,7 @@ const TimesheetPage = () => {
     const handleChangePassword = async () => {
         try {
             const response = await axios.put(
-                `http://localhost:5000/api/users/${passwordChange.userId}/password`,
+                `http://192.168.4.22:5000/api/users/${passwordChange.userId}/password`,
                 { newPassword: passwordChange.newPassword }
             );
             if (response.data.success) {
@@ -200,7 +200,7 @@ const TimesheetPage = () => {
                 }))
             };
 
-            const response = await axios.post('http://localhost:5000/api/timesheets', payload);
+            const response = await axios.post('http://192.168.4.22:5000/api/timesheets', payload);
             if (response.data.success) {
                 alert('Timesheet saved successfully!');
                 setEntries([{ 
@@ -235,7 +235,7 @@ const TimesheetPage = () => {
 
     const handleDownloadReport = async () => {
         try {
-            const response = await axios.get(`http://localhost:5000/api/timesheet/report?startDate=${startDate}&endDate=${endDate}`, {
+            const response = await axios.get(`http://192.168.4.22:5000/api/timesheet/report?startDate=${startDate}&endDate=${endDate}`, {
                 responseType: 'blob' // Important for downloading files
             });
 
